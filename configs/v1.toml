@@ -1,0 +1,61 @@
+# Jev CartPole demo, v1: five actions + priorities, chosen by bounded tuning on dev seeds. See PLAN.md.
+# Everything here is frozen before the test run: flip `frozen` to true only when the prompt,
+# semantic thresholds, model and conditions are final. Changing anything afterwards changes the
+# config hash, and existing result directories will refuse to mix old and new settings.
+
+[run]
+name = "v1"
+frozen = true
+# The API offers no dated model names (only jev-latest / jev-preview); every response logs the
+# version that answered (jev-1.13.0 at freeze time, 2026-09-18).
+model = "jev-latest"
+workers = 8                      # concurrent episodes in the paused protocol
+max_requests_per_second = 18     # below the 1,200 requests/minute account limit
+
+[env]
+n_actions = 5                    # graded forces: -10, -5, 0, +5, +10 N
+
+# Seed ranges as [first, count]. Dev seeds are for prompt work; test seeds are used once.
+[seeds]
+dev = [0, 10]
+offline = [20000, 40]
+test = [10000, 30]
+
+[conditions.nominal]
+init_scale = 0.05                # CartPole-v1 default: every state variable ~ U(-0.05, 0.05)
+
+[conditions.impulse]
+init_scale = 0.05
+impulse_steps = [100, 250, 400]  # pushes at 2 s, 5 s and 8 s
+impulse_min = 0.5                # |kick| to pole angular velocity, rad/s, random sign
+impulse_max = 1.0
+
+[conditions.offline_pool]        # wider states for the open-loop check only
+init_scale = 0.1
+impulse_steps = [50, 150, 250, 350, 450]
+impulse_min = 0.5
+impulse_max = 1.0
+
+[protocols.paused]
+decision_steps = 1               # decide every 20 ms step; the simulation waits for Jev
+realtime = false
+
+[protocols.realtime]
+decision_steps = 5               # 100 ms; set from the latency pilot (p95 / 20 ms, rounded up)
+realtime = true
+episodes = 10                    # short live demo
+
+[jev]
+timeout_s = 2.0                  # per HTTP attempt; failures hold the previous action
+instructions = "priorities"      # adds priorities to the v0 task text; no control rule
+
+[offline]
+condition = "offline_pool"
+states = 1000
+repeat_fraction = 0.5            # re-ask this share of states to measure consistency
+commit_steps = 5                 # counterfactual: hold each candidate action for 100 ms,
+horizon_steps = 100              # then continue with LQR for the rest of 2 s
+
+[pass_mark]                      # "acceptable" = CartPole-v1's own solved threshold
+mean_return = 475
+success_rate = 0.8

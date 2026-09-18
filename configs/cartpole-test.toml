@@ -1,0 +1,54 @@
+# Frozen after the five-seed pilot. Same policies and physics; untouched test seeds.
+[run]
+name = "cartpole-v2"
+frozen = true
+model = "jev-1.13.0"
+workers = 4
+max_requests_per_second = 10
+
+[env]
+n_actions = 5
+
+[seeds]
+dev = [1000, 5]
+offline = [30000, 40]
+test = [40000, 30]
+
+[conditions.nominal]
+init_scale = 0.05
+
+[conditions.impulse]
+init_scale = 0.05
+impulse_steps = [100, 250, 400]
+impulse_min = 0.5
+impulse_max = 1.0
+
+[conditions.offline_pool]
+init_scale = 0.1
+impulse_steps = [50, 150, 250, 350, 450]
+impulse_min = 0.5
+impulse_max = 1.0
+
+[protocols.paused]
+decision_steps = 1
+realtime = false
+
+[protocols.realtime]
+decision_steps = 5
+realtime = true
+episodes = 5
+
+[jev]
+timeout_s = 2.0
+instructions = "base"
+
+[offline]
+condition = "offline_pool"
+states = 1000
+repeat_fraction = 0.5
+commit_steps = 5
+horizon_steps = 100
+
+[pass_mark]
+mean_return = 475
+success_rate = 0.8

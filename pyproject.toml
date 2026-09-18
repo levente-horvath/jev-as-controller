@@ -1,0 +1,34 @@
+[project]
+name = "jev-controller"
+version = "0.1.0"
+description = "Demonstrate TypeSafe AI's Jev as a direct CartPole controller."
+authors = [
+    { name = "Levente Horvath", email = "levente-horvath@outlook.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "gymnasium>=1.3.0",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "scipy>=1.18.1",
+    "typesafe-sdk>=0.7.0",
+]
+
+[project.scripts]
+jev-demo = "jev_controller.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

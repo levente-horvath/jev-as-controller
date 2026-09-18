@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CartPole</title>
+<style>
+:root {
+  --ground: #eef1ec;
+  --panel: #fbfcfa;
+  --ink: #1b2320;
+  --muted: #5d6a64;
+  --rule: #d3dad4;
+  --track: #9aa6a0;
+  --jev: #b86a00;
+  --jev-soft: rgba(184, 106, 0, 0.14);
+  --ref: #2f6f6c;
+  --fault: #b8322b;
+  --fault-soft: rgba(184, 50, 43, 0.10);
+  --good: #2e7d4f;
+  --display: "Chivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #101513;
+    --panel: #171e1b;
+    --ink: #e3eae5;
+    --muted: #93a39b;
+    --rule: #2b3531;
+    --track: #56635d;
+    --jev: #f0a43a;
+    --jev-soft: rgba(240, 164, 58, 0.16);
+    --ref: #6fb7b3;
+    --fault: #ec6a5e;
+    --fault-soft: rgba(236, 106, 94, 0.12);
+    --good: #6cc48f;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #101513;
+  --panel: #171e1b;
+  --ink: #e3eae5;
+  --muted: #93a39b;
+  --rule: #2b3531;
+  --track: #56635d;
+  --jev: #f0a43a;
+  --jev-soft: rgba(240, 164, 58, 0.16);
+  --ref: #6fb7b3;
+  --fault: #ec6a5e;
+  --fault-soft: rgba(236, 106, 94, 0.12);
+  --good: #6cc48f;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 15px/1.5 var(--body);
+  padding: 20px 16px 40px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+h1 { font: 700 clamp(26px, 4vw, 38px)/1.05 var(--display); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--jev); }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.picker { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.label { font: 500 11px/1 var(--body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+select, button {
+  font: 500 14px/1 var(--body); color: var(--ink); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 9px 12px; cursor: pointer;
+}
+select { max-width: 100%; }
+button:hover, select:hover { border-color: var(--track); }
+:focus-visible { outline: 2px solid var(--jev); outline-offset: 2px; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.stat { background: var(--panel); padding: 12px 14px; display: grid; gap: 4px; }
+.stat b { font: 500 20px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.stat small { color: var(--muted); font-size: 12.5px; }
+.pill { display: inline-block; font: 600 11px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; vertical-align: 3px; margin-left: 6px; }
+.pill.ok { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.pill.bad { color: var(--fault); background: var(--fault-soft); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+@media (max-width: 880px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.instrument { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.stage { position: relative; }
+canvas { display: block; width: 100%; }
+#stage { aspect-ratio: 16 / 7; max-width: 100%; }
+#stage.two { aspect-ratio: 16 / 10; }
+#scope { height: 150px; border-top: 1px solid var(--rule); cursor: pointer; touch-action: none; }
+.clock { position: absolute; top: 10px; left: 14px; font: 500 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); pointer-events: none; }
+.clock span { color: var(--ink); }
+.legend { position: absolute; top: 10px; right: 14px; display: flex; gap: 14px; font-size: 12.5px; color: var(--muted); pointer-events: none; flex-wrap: wrap; justify-content: end; }
+.key::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; background: currentColor; }
+.key.jev { color: var(--jev); } .key.ref { color: var(--ref); } .key.fault { color: var(--fault); }
+.key span { color: var(--muted); }
+
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--rule); }
+.transport .spacer { flex: 1; }
+.transport .hint { color: var(--muted); font-size: 12.5px; }
+#play { min-width: 84px; background: var(--ink); color: var(--panel); border-color: var(--ink); }
+
+aside { display: grid; gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; }
+.card h2 { margin: 0; font: 700 15px/1.2 var(--display); }
+.choice { font: 700 24px/1 var(--display); color: var(--jev); }
+.choice small { font: 400 13px/1 var(--body); color: var(--muted); margin-left: 6px; }
+.bars { display: grid; gap: 7px; }
+.bar { display: grid; grid-template-columns: 92px 1fr 44px; gap: 8px; align-items: center; font: 400 12.5px/1 var(--mono); }
+.bar .track { height: 10px; background: var(--ground); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--track); transition: width 90ms linear; }
+.bar.on .fill { background: var(--jev); }
+.bar.on { color: var(--ink); } .bar { color: var(--muted); }
+.bar output { text-align: right; font-variant-numeric: tabular-nums; }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 13px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.labels { display: flex; flex-wrap: wrap; gap: 6px; }
+.labels span { font-size: 12px; padding: 3px 7px; border-radius: 4px; background: var(--jev-soft); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.banner { border: 1px dashed var(--fault); color: var(--fault); background: var(--fault-soft); border-radius: 8px; padding: 10px 14px; font-weight: 500; }
+footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
+footer code { font-family: var(--mono); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .bar .fill { transition: none; } }
+:root[data-theme="dark"] { --ground:#0b101b; --panel:#121b2a; --ink:#e6edf8; --muted:#96a6bd; --rule:#263449; --track:#566981; --jev:#ffb15c; --ref:#59d6c5; }
+body { margin:0; padding:32px 24px 48px; font-family:system-ui,sans-serif; }
+.wrap { max-width:1400px; gap:20px; }
+.wrap > *, header > div, .main > * { min-width:0; max-width:100%; }
+.mode { overflow-wrap:anywhere; }
+.picker select { min-width:0; width:100%; }
+header { padding-bottom:18px; border-bottom:1px solid var(--rule); }
+h1 { font-size:clamp(32px,4vw,48px); letter-spacing:-2px; }
+.eyebrow { font:11px var(--mono); color:var(--ref); letter-spacing:2px; margin:0 0 12px; }
+.lede { max-width:78ch; line-height:1.6; font-size:13px; }
+.main { grid-template-columns:minmax(0,1fr) 310px; }
+.stat { padding:18px; } .stat b { font-size:26px; }
+.instrument,.card,.stats { border-radius:12px; }
+#stage.two { aspect-ratio:16 / 8; }
+#scope,#positionScope,#forceScope { height:130px; border-top:1px solid var(--rule); touch-action:none; }
+#forceScope { height:90px; }
+.scrubber { display:flex; align-items:center; gap:14px; padding:10px 16px; border-top:1px solid var(--rule); }
+input[type=range] { flex:1; min-width:60px; accent-color:var(--jev); }
+.bar { grid-template-columns:100px 1fr 42px; font-size:11px; }
+.choice { font-size:22px; }
+.bar .track { height:8px; }
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th,td { padding:11px 14px; text-align:left; border-bottom:1px solid var(--rule); white-space:nowrap; }
+th { color:var(--muted); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.06em; }
+td { font-family:var(--mono); font-size:12px; }
+tr[data-episode] { cursor:pointer; } tr[data-episode]:hover { background:var(--jev-soft); }
+.section-heading { padding:16px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.section-heading h2 { margin:0; font-size:15px; }
+.banner { font-size:13px; }
+.mode { color:var(--ref); font:11px var(--mono); letter-spacing:.08em; margin-top:8px; }
+.filters { display:flex; gap:8px; margin-bottom:8px; } .filters label { flex:1; display:grid; gap:5px; }
+header { align-items:center; }
+h1 { font-size:30px; letter-spacing:-1px; font-weight:500; }
+.mode { color:var(--muted); letter-spacing:0; }
+.stat { padding:14px 18px; } .stat small:empty { display:none; }
+.label,th { text-transform:none; letter-spacing:0; font-size:12px; }
+.card { border:none; background:transparent; padding:12px 4px; }
+aside { gap:8px; }
+details { color:var(--muted); font-size:12px; }
+summary { cursor:pointer; padding:8px 0; }
+details dl,details .labels { margin-top:8px; }
+.banner { border-style:solid; padding:8px 12px; }
+footer { font-size:11px; }
+@media(max-width:880px) { .main { grid-template-columns:1fr; } aside { grid-template-columns:1fr 1fr; } }
+@media(max-width:550px) { body {padding:16px 10px;} aside {grid-template-columns:minmax(0,1fr);} .stats {grid-template-columns:repeat(2,minmax(0,1fr));} .hint {display:none;} .clock,.legend {font-size:10px;} }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>CartPole</h1>
+      <div class="mode" id="mode"></div>
+    </div>
+    <div class="picker">
+      <div class="filters"><label class="label" for="policyFilter">Controller<select id="policyFilter"><option value="all">All controllers</option></select></label><label class="label" for="conditionFilter">Condition<select id="conditionFilter"><option value="all">All conditions</option></select></label></div>
+      <label class="label" for="episode">Episode</label>
+      <select id="episode"></select>
+    </div>
+  </header>
+
+  <div id="fakeBanner" class="banner" hidden>Simulated test data</div>
+  <div id="legacyBanner" class="banner" hidden>Legacy results · before repairs</div>
+
+  <section class="stats" aria-label="Episode summary">
+    <div class="stat"><span class="label">Steps</span><b id="sResult">–</b><small id="sResultNote"></small></div>
+    <div class="stat"><span class="label">Decisions</span><b id="sDecisions">–</b><small id="sFallback"></small></div>
+    <div class="stat"><span class="label">Latency · median</span><b id="sLatency">–</b><small id="sLatency95"></small></div>
+    <div class="stat"><span class="label">Cost · estimated</span><b id="sCost">–</b><small id="sTokens"></small></div>
+  </section>
+
+  <div class="main">
+    <section class="instrument" aria-label="Replay">
+      <div class="stage">
+        <canvas id="stage" role="img" aria-label="Animated cart and pole"></canvas>
+        <div class="clock">sim <span id="simClock">0.00 s</span> · compute <span id="wallClock">0.0 s</span></div>
+        <div class="legend"><span class="key jev" id="policyKey">Controller</span><span class="key ref" id="refKey">LQR</span><span class="key fault">impulse</span></div>
+      </div>
+      <canvas id="scope" role="img" aria-label="Pole angle over time; click to scrub"></canvas>
+      <canvas id="positionScope" role="img" aria-label="Cart position over time"></canvas>
+      <canvas id="forceScope" role="img" aria-label="Applied force over time"></canvas>
+      <div class="scrubber"><label class="label" for="timeline">Time</label><input id="timeline" type="range" min="0" max="500" step="1" value="0"><output id="timeReadout">0.00 s</output></div>
+      <div class="transport">
+        <button id="play" type="button">Play</button>
+        <button id="back" type="button" aria-label="Step back" title="Previous step (←)">←</button>
+        <button id="fwd" type="button" aria-label="Step forward" title="Next step (→)">→</button>
+        <label class="label" for="speed">Speed</label>
+        <select id="speed">
+          <option value="0.1">0.1×</option>
+          <option value="0.25">0.25×</option>
+          <option value="0.5" selected>0.5×</option>
+          <option value="1">1×</option>
+        </select>
+        <span class="spacer"></span>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card" aria-live="off">
+        <span class="label">Force</span>
+        <div class="choice" id="choice">–</div>
+        <div class="bars" id="bars"></div>
+        <dl>
+          <dt>Confidence</dt><dd id="conf">–</dd>
+          <dt>Latency</dt><dd id="lat">–</dd>
+          <dt>Step</dt><dd id="askedAt">–</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <span class="label">State</span>
+        <dl id="obs"></dl>
+        <details><summary>Model labels</summary><div class="labels" id="labels"></div></details>
+      </div>
+    </aside>
+  </div>
+
+  <section class="instrument" aria-label="All included results">
+    <div class="section-heading"><h2>Results</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Controller</th><th>Condition</th><th>Completed</th><th>Mean steps</th><th>RMS angle</th></tr></thead><tbody id="overview"></tbody></table></div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+(() => {
+  const meta = DATA.meta;
+  const $ = (id) => document.getElementById(id);
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmtMs = (s) => `${Math.round(s * 1000)} ms`;
+  const DT = meta.dt;
+  const policyName = name => ({jev_raw:'Jev · raw',jev_semantic:'Jev · semantic',lqr:'LQR',pid:'PID',heuristic:'Heuristic',random:'Random'}[name] || name);
+
+  let ep = null, step = 0, playing = false, last = 0, wallAt = [], decisionAt = [];
+  const endStep = () => Math.max(ep.steps, ep.compare ? ep.compare.states.length - 1 : 0);
+
+  const groups = new Map();
+  DATA.episodes.forEach((e, i) => {
+    const key = `${e.policy}/${e.condition}`;
+    if (!groups.has(key)) groups.set(key, {episodes:[], index:i});
+    groups.get(key).episodes.push(e);
+  });
+  for (const group of groups.values()) {
+    const es = group.episodes, first = es[0], n = es.length;
+    const rms = es.reduce((acc,e) => acc + Math.sqrt(e.states.reduce((s,x) => s+x[2]**2,0)/e.states.length),0)/n*180/Math.PI;
+    const values = [policyName(first.policy),first.condition,`${es.filter(e=>e.success).length}/${n}`,
+      (es.reduce((s,e)=>s+e.steps,0)/n).toFixed(1),`${rms.toFixed(2)}°`];
+    const row = document.createElement('tr'); row.dataset.episode = group.index;
+    row.tabIndex = 0;
+    row.title = `Seeds: ${es.map(e=>e.seed).join(', ')}`;
+    for (const value of values) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+    const activate=()=>{setPlaying(false); $('policyFilter').value='all'; $('conditionFilter').value='all'; populateEpisodes(group.index); load(group.index);};
+    row.addEventListener('click',activate);
+    row.addEventListener('keydown',e=>{if(e.key==='Enter')activate();});
+    $('overview').append(row);
+  }
+
+  $("fakeBanner").hidden = !meta.fake;
+  $("legacyBanner").hidden = !meta.legacy || meta.fake;
+  $("refKey").hidden = !DATA.episodes.some((e) => e.compare);
+
+  for(const [id,key] of [['policyFilter','policy'],['conditionFilter','condition']]) {
+    for(const value of [...new Set(DATA.episodes.map(e=>e[key]))].sort()) {
+      const option=document.createElement('option');option.value=value;option.textContent=key==='policy'?policyName(value):value;$(id).append(option);
+    }
+    $(id).addEventListener('change',()=>{setPlaying(false);populateEpisodes();load(+$('episode').value);});
+  }
+  function populateEpisodes(selected=null) {
+    $('episode').replaceChildren();
+    DATA.episodes.forEach((e, i) => {
+    if(($('policyFilter').value!=='all' && e.policy!==$('policyFilter').value) ||
+       ($('conditionFilter').value!=='all' && e.condition!==$('conditionFilter').value)) return;
+    const o = document.createElement("option");
+    o.value = i;
+    o.textContent = `${e.seed} · ${policyName(e.policy)} · ${e.condition}`;
+    $("episode").append(o);
+    });
+    if (!$('episode').options.length) {
+      $('policyFilter').value='all'; $('conditionFilter').value='all'; populateEpisodes(selected); return;
+    }
+    if(selected!==null) $('episode').value=String(selected);
+  }
+  populateEpisodes();
+
+  function load(i) {
+    ep = DATA.episodes[i];
+    step = 0;
+    $("policyKey").textContent = policyName(ep.policy);
+    $("refKey").hidden = !ep.compare;
+    $("refKey").textContent = ep.compare ? policyName(ep.compare.policy) : '';
+    $("timeline").max = endStep();
+    $("mode").textContent = ep.protocol === 'paused' ? 'Replay · paused physics' : 'Replay · simulated delay';
+    // Decision in force at each step, and cumulative wall-clock thinking time.
+    decisionAt = new Array(ep.states.length).fill(-1);
+    wallAt = new Array(ep.states.length).fill(0);
+    let d = -1, wall = 0, k = 0;
+    const sorted = ep.decisions.map((x, j) => [x, j]).sort((a, b) => a[0].a - b[0].a);
+    for (let s = 0; s < ep.states.length; s++) {
+      while (k < sorted.length && sorted[k][0].a <= s) { d = sorted[k][1]; k++; }
+      decisionAt[s] = d;
+    }
+    for (let s = 0, j = 0; s < ep.states.length; s++) {
+      while (j < ep.decisions.length && ep.decisions[j].s <= s) { wall += ep.decisions[j].l; j++; }
+      wallAt[s] = wall;
+    }
+    const lats = ep.decisions.map((x) => x.l).sort((a, b) => a - b);
+    const q = (p) => lats[Math.min(lats.length - 1, Math.floor(p * lats.length))];
+    $("sResult").innerHTML = ep.success
+      ? `${ep.steps}/500<span class="pill ok">balanced</span>`
+      : `${ep.steps}/500<span class="pill bad">failed</span>`;
+    $("sResultNote").textContent = ep.success ? '' : ep.termination.replaceAll('_',' ');
+    $("sDecisions").textContent = ep.decisions.length.toLocaleString();
+    const fb = ep.decisions.filter((x) => x.fb).length;
+    $("sFallback").textContent = fb ? `${fb} fallback${fb===1?'':'s'}` : '';
+    $("sLatency").textContent = fmtMs(q(0.5));
+    $("sLatency95").textContent = '';
+    $("sLatency").title = `p95 ${fmtMs(q(0.95))}`;
+    $("sCost").textContent = meta.fake ? "$0 · fake" : `$${(ep.tokens * meta.price_per_mtok / 1e6).toFixed(4)}`;
+    $("sTokens").textContent = '';
+    $("sCost").title = `${ep.tokens.toLocaleString()} logged input tokens`;
+    $("footer").textContent = footerText();
+    draw();
+  }
+
+  function footerText() {
+    return `${meta.run_name} · ${meta.models.join(', ') || 'local'} · ${meta.labels.length} actions`;
+  }
+
+  // ---------- drawing ----------
+  function fit(canvas) {
+    const r = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr)) {
+      canvas.width = Math.round(r.width * dpr);
+      canvas.height = Math.round(r.height * dpr);
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return [ctx, r.width, r.height];
+  }
+
+  function drawRig(ctx, W, y0, scale, state, color, ghost, forceSign, forceMag, kick) {
+    const [x, , th] = state;
+    const cx = W / 2 + x * scale;
+    const cartW = 0.5 * scale, cartH = Math.max(14, 0.18 * scale);
+    const L = 2 * meta.half_length * scale;
+    ctx.save();
+    ctx.globalAlpha = ghost ? 0.55 : 1;
+    // pole
+    const px = cx + L * Math.sin(th), py = y0 - cartH / 2 - L * Math.cos(th);
+    ctx.lineCap = "round";
+    ctx.lineWidth = ghost ? 5 : 8;
+    ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.moveTo(cx, y0 - cartH / 2); ctx.lineTo(px, py); ctx.stroke();
+    // cart
+    ctx.fillStyle = ghost ? css("--panel") : css("--ink");
+    ctx.strokeStyle = ghost ? color : css("--ink");
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(cx - cartW / 2, y0 - cartH / 2, cartW, cartH, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(cx, y0 - cartH / 2, 4.5, 0, Math.PI * 2); ctx.fill();
+    // force arrow
+    if (forceSign) {
+      const len = (0.22 + 0.2 * forceMag) * scale * forceSign;
+      const ay = y0 + cartH / 2 + 12;
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx, ay); ctx.lineTo(cx + len, ay); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + len + 8 * forceSign, ay); ctx.lineTo(cx + len, ay - 6); ctx.lineTo(cx + len, ay + 6); ctx.closePath(); ctx.fill();
+    }
+    if (kick) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = css("--fault");
+      ctx.font = `600 13px ${css("--body")}`;
+      ctx.textAlign = "center";
+      ctx.fillText(`push ${kick > 0 ? "→" : "←"} ${Math.abs(kick).toFixed(2)} rad/s`, px, py - 12);
+    }
+    ctx.restore();
+  }
+
+  function drawStage() {
+    const lanes = ep.compare ? 2 : 1;
+    $("stage").classList.toggle("two", lanes === 2);
+    const [ctx, W, H] = fit($("stage"));
+    ctx.clearRect(0, 0, W, H);
+    const scale = Math.min((W - 40) / (2 * meta.x_limit + 0.6), lanes === 2 ? H * 0.28 : H * 0.55);
+    const rails = lanes === 2 ? [H * 0.47, H * 0.92] : [H * 0.82];
+    const s = Math.floor(step);
+    const kick = ep.impulses.find(([t]) => s >= t && s - t < 25);
+    rails.forEach((y, lane) => {
+      ctx.strokeStyle = css("--track"); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(10, y); ctx.lineTo(W - 10, y); ctx.stroke();
+      for (const edge of [-meta.x_limit, meta.x_limit]) {
+        const ex = W / 2 + edge * scale;
+        ctx.strokeStyle = css("--fault"); ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(ex, y - 1.1 * scale); ctx.lineTo(ex, y + 8); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle = css("--muted"); ctx.font = `12px ${css("--mono")}`;
+      ctx.textAlign = "left";
+      if (lanes === 2) ctx.fillText(lane === 0 ? policyName(ep.policy) : policyName(ep.compare.policy), 14, y - 1.1 * scale + 4);
+    });
+    // Jev lane
+    const st = ep.states[Math.min(s, ep.states.length - 1)];
+    const a = ep.actions[Math.min(s, ep.actions.length - 1)];
+    const f = s < ep.steps ? meta.forces[a] : 0;
+    const fmax = Math.max(...meta.forces.map(Math.abs));
+    drawRig(ctx, W, rails[0], scale, st, css("--jev"), false, Math.sign(f), Math.abs(f) / fmax, kick ? kick[1] : 0);
+    if (ep.compare) {
+      const cs = Math.min(s, ep.compare.states.length - 1);
+      const ca = ep.compare.actions[Math.min(cs, ep.compare.actions.length - 1)];
+      const cf = s < ep.compare.states.length-1 ? meta.forces[ca] : 0;
+      const refKick=(ep.compare.impulses || []).find(([t])=>s>=t && s-t<25);
+      drawRig(ctx, W, rails[1], scale, ep.compare.states[cs], css("--ref"), true, Math.sign(cf), Math.abs(cf) / fmax, refKick ? refKick[1] : 0);
+      if (s >= ep.compare.states.length - 1 && !ep.compare.success) {
+        ctx.fillStyle = css("--fault"); ctx.font = `600 13px ${css("--body")}`; ctx.textAlign = "right";
+        ctx.fillText(`${ep.compare.policy}: ${ep.compare.termination}`, W - 14, rails[1] - 1.1 * scale + 4);
+      }
+    }
+    if (s >= ep.states.length - 1 && !ep.success) {
+      ctx.fillStyle = css("--fault"); ctx.font = `600 14px ${css("--body")}`; ctx.textAlign = "right";
+      ctx.fillText(`${ep.policy}: ${ep.termination.replace("_", " ")} limit`, W - 14, 44);
+    }
+  }
+
+  function drawScope(id='scope', metric=2) {
+    const [ctx, W, H] = fit($(id));
+    ctx.clearRect(0, 0, W, H);
+    const padL = 44, padR = 12, padT = 12, padB = 26;
+    const T = 500;
+    const xOf = (t) => padL + (t / T) * (W - padL - padR);
+    const lim = metric===2 ? meta.theta_limit : meta.x_limit;
+    const yOf = (th) => padT + (1 - (th + lim) / (2 * lim)) * (H - padT - padB);
+    // limit band + grid
+    ctx.fillStyle = css("--fault-soft");
+    ctx.fillRect(padL, padT, W - padL - padR, 3); ctx.fillRect(padL, H - padB - 3, W - padL - padR, 3);
+    ctx.strokeStyle = css("--rule"); ctx.lineWidth = 1;
+    ctx.fillStyle = css("--muted"); ctx.font = `11px ${css("--mono")}`;
+    for (const value of [-lim,-lim/2,0,lim/2,lim]) {
+      const y = yOf(value);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      ctx.textAlign = "right"; ctx.fillText(metric===2 ? `${Math.round(value*180/Math.PI)}°` : `${value.toFixed(1)}`, padL - 6, y + 4);
+    }
+    ctx.textAlign = "center";
+    for (let sec = 0; sec <= 10; sec += 2) ctx.fillText(`${sec} s`, xOf(sec / DT), H - 8);
+    // action barcode for Jev
+    for (let t = 0; metric===2 && t < ep.actions.length; t++) {
+      const f = meta.forces[ep.actions[t]];
+      if (!f) continue;
+      ctx.fillStyle = css("--jev"); ctx.globalAlpha = 0.18 + 0.25 * (Math.abs(f) / 10);
+      const y = f > 0 ? padT : H - padB - 3;
+      ctx.fillRect(xOf(t), y, Math.max(1, xOf(t + 1) - xOf(t)), 3);
+    }
+    ctx.globalAlpha = 1;
+    // pushes
+    for (const [t] of ep.impulses) {
+      ctx.strokeStyle = css("--fault"); ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(xOf(t), padT); ctx.lineTo(xOf(t), H - padB); ctx.stroke(); ctx.setLineDash([]);
+    }
+    const trace = (states, color, dash) => {
+      ctx.save(); ctx.beginPath(); ctx.rect(padL,padT,W-padL-padR,H-padT-padB); ctx.clip();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.setLineDash(dash);
+      ctx.beginPath();
+      states.forEach((s, t) => (t ? ctx.lineTo(xOf(t), yOf(s[metric])) : ctx.moveTo(xOf(t), yOf(s[metric]))));
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+    };
+    if (ep.compare) trace(ep.compare.states, css("--ref"), [5, 4]);
+    trace(ep.states, css("--jev"), []);
+    // playhead
+    const px = xOf(step);
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(px, padT - 4); ctx.lineTo(px, H - padB + 4); ctx.stroke();
+    ctx.save(); ctx.translate(12, H / 2 - 6); ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = css("--muted"); ctx.textAlign = "center"; ctx.fillText(metric===2 ? "pole angle" : "cart / m", 0, 0); ctx.restore();
+    scopeGeom = { padL, padR, W };
+  }
+  let scopeGeom = null;
+
+  function drawForce() {
+    const [ctx,W,H]=fit($('forceScope')); ctx.clearRect(0,0,W,H);
+    const x=t=>44+t/500*(W-56), y=f=>H/2-f/10*(H/2-15);
+    ctx.font=`10px ${css('--mono')}`; ctx.fillStyle=css('--muted'); ctx.textAlign='right';
+    for(const f of [-10,0,10]) {ctx.fillText(`${f} N`,38,y(f)+4);ctx.strokeStyle=css('--rule');ctx.beginPath();ctx.moveTo(44,y(f));ctx.lineTo(W-12,y(f));ctx.stroke();}
+    const plot=(actions,color)=>{ctx.strokeStyle=color;ctx.lineWidth=1.3;ctx.beginPath();actions.forEach((a,t)=>{if(t===0)ctx.moveTo(x(t),y(meta.forces[a]));else ctx.lineTo(x(t),y(meta.forces[a]));ctx.lineTo(x(t+1),y(meta.forces[a]));});ctx.stroke();};
+    if(ep.compare) plot(ep.compare.actions,css('--ref')); plot(ep.actions,css('--jev'));
+    ctx.strokeStyle=css('--ink');ctx.beginPath();ctx.moveTo(x(step),0);ctx.lineTo(x(step),H);ctx.stroke();
+  }
+
+  function drawPanel() {
+    const s = Math.min(Math.floor(step), ep.states.length - 1);
+    $("simClock").textContent = `${(step * DT).toFixed(2)} s`;
+    $('timeReadout').textContent = `${(step*DT).toFixed(2)} s`;
+    $('timeline').value = Math.floor(step);
+    const wall = wallAt[s];
+    $("wallClock").textContent = wall >= 60 ? `${Math.floor(wall / 60)} min ${(wall % 60).toFixed(0)} s` : `${wall.toFixed(1)} s`;
+    const di = decisionAt[s];
+    const d = di >= 0 ? ep.decisions[di] : null;
+    const bars = $("bars");
+    if (bars.childElementCount !== meta.labels.length) {
+      bars.innerHTML = meta.labels.map((l) =>
+        `<div class="bar"><span>${meta.forces[meta.labels.indexOf(l)]} N</span><div class="track"><div class="fill"></div></div><output>–</output></div>`).join("");
+    }
+    [...bars.children].forEach((row, j) => {
+      const p = d && d.p ? d.p[j] : null;
+      row.classList.toggle("on", !!d && d.act === j);
+      row.querySelector(".fill").style.width = p == null ? "0%" : `${(p * 100).toFixed(1)}%`;
+      row.querySelector("output").textContent = p == null ? "–" : `${Math.round(p * 100)}%`;
+    });
+    $("choice").textContent = step>=ep.steps ? 'Ended' : d ? `${meta.forces[d.act]>0?'+':''}${meta.forces[d.act]} N${d.fb ? ' (held)' : ''}` : '—';
+    $("conf").textContent = d && d.c != null ? d.c.toFixed(2) : "–";
+    $("lat").textContent = d ? fmtMs(d.l) : "–";
+    $("askedAt").textContent = d ? d.s : "–";
+    const o = d ? d.o : ep.states[s];
+    const names = [["x", "m"], ["v", "m/s"], ["θ", "rad"], ["ω", "rad/s"]];
+    $("obs").innerHTML = names.map(([n, u], j) => `<dt>${n}</dt><dd>${o[j] >= 0 ? "+" : ""}${o[j].toFixed(4)} ${u}</dd>`).join("");
+    $("labels").innerHTML = d && d.lab ? Object.values(d.lab).map((v) => `<span>${v}</span>`).join("") : "";
+    $("labels").parentElement.hidden = !(d && d.lab);
+  }
+
+  function draw() { drawStage(); drawScope(); drawScope('positionScope',0); drawForce(); drawPanel(); }
+
+  // ---------- playback ----------
+  function frame(ts) {
+    if (!playing) return;
+    const dt = last ? (ts - last) / 1000 : 0;
+    last = ts;
+    step = Math.min(endStep(), step + (dt / DT) * parseFloat($("speed").value));
+    draw();
+    if (step >= endStep()) { setPlaying(false); return; }
+    requestAnimationFrame(frame);
+  }
+  function setPlaying(on) {
+    if (on && step >= endStep()) step = 0;
+    playing = on; last = 0;
+    $("play").textContent = on ? "Pause" : "Play";
+    if (on) requestAnimationFrame(frame);
+  }
+  function jump(to) { step = Math.max(0, Math.min(endStep(), to)); draw(); }
+  $('timeline').addEventListener('input', e=>{setPlaying(false);jump(+e.target.value);});
+
+  $("play").addEventListener("click", () => setPlaying(!playing));
+  $("back").addEventListener("click", () => { setPlaying(false); jump(Math.floor(step) - 1); });
+  $("fwd").addEventListener("click", () => { setPlaying(false); jump(Math.floor(step) + 1); });
+  $("episode").addEventListener("change", (e) => { setPlaying(false); load(+e.target.value); });
+  const scrub = (e) => {
+    if (!scopeGeom) return;
+    const r = $("scope").getBoundingClientRect();
+    const t = ((e.clientX - r.left - scopeGeom.padL) / (scopeGeom.W - scopeGeom.padL - scopeGeom.padR)) * 500;
+    jump(Math.round(t));
+  };
+  $("scope").addEventListener("pointerdown", (e) => { setPlaying(false); scrub(e); $("scope").setPointerCapture(e.pointerId); });
+  $("scope").addEventListener("pointermove", (e) => { if (e.buttons) scrub(e); });
+  document.addEventListener("keydown", (e) => {
+    if (['SELECT','INPUT','BUTTON','TR'].includes(e.target.tagName)) return;
+    if (e.code === "Space") { e.preventDefault(); setPlaying(!playing); }
+    if (e.code === "ArrowRight") { setPlaying(false); jump(Math.floor(step) + 1); }
+    if (e.code === "ArrowLeft") { setPlaying(false); jump(Math.floor(step) - 1); }
+  });
+  new ResizeObserver(() => draw()).observe($("stage"));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const start = DATA.episodes.findIndex((e) => e.policy === 'jev_semantic' && e.condition === 'nominal');
+  $("episode").value = String(Math.max(0, start));
+  load(Math.max(0, start));
+  jump(0);
+})();
+</script>
+</html>
